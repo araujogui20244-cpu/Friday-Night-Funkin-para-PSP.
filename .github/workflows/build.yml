@@ -1,0 +1,31 @@
+name: Build GUD FNF PSP
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: pspdev/pspdev:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build EBOOT
+        run: |
+          make clean || true
+          make
+          mkdir -p output/PSP/GAME/GUDFNF
+          cp EBOOT.PBP output/PSP/GAME/GUDFNF/EBOOT.PBP
+          printf "GUD FNF PSP - copie a pasta GUDFNF para PSP/GAME/\n" > output/LEIA-ME.txt
+      - name: Package for PPSSPP
+        run: |
+          cd output
+          zip -r ../GUD_FNF_PSP_PPSSPP.zip .
+      - name: Upload game ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: GUD-FNF-PSP-PPSSPP
+          path: GUD_FNF_PSP_PPSSPP.zip
+          if-no-files-found: error
