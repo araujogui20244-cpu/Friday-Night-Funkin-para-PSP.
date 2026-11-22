@@ -18,11 +18,17 @@ jobs:
           make
           mkdir -p output/PSP/GAME/GUDFNF
           cp EBOOT.PBP output/PSP/GAME/GUDFNF/EBOOT.PBP
-          printf "GUD FNF PSP - copie a pasta GUDFNF para PSP/GAME/\n" > output/LEIA-ME.txt
+          printf "GUD FNF PSP - copie a pasta GUDFNF para PSP/GAME/\\n" > output/LEIA-ME.txt
       - name: Package for PPSSPP
         run: |
-          cd output
-          zip -r ../GUD_FNF_PSP_PPSSPP.zip .
+          python3 - <<'PY'
+          import os, zipfile
+          with zipfile.ZipFile('GUD_FNF_PSP_PPSSPP.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              for root, _, files in os.walk('output'):
+                  for name in files:
+                      path = os.path.join(root, name)
+                      z.write(path, os.path.relpath(path, 'output'))
+          PY
       - name: Upload game ZIP
         uses: actions/upload-artifact@v4
         with:
