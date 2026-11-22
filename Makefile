@@ -13,4 +13,6 @@ LIBS = -lpspdebug -lpspdisplay -lpspctrl -lpspkernel
 EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = GUD FNF PSP
 
+PSPDEV ?= /usr/local/pspdev
+PSPSDK ?= $(PSPDEV)/psp/sdk
 include $(PSPSDK)/lib/build.mak
