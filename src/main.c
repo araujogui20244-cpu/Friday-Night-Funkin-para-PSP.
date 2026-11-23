@@ -1,7 +1,7 @@
+#define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
-#include <SDL_ttf.h>
 #include <pspkernel.h>
 #include <pspctrl.h>
 #include "gud_chart.h"
@@ -31,22 +31,45 @@ static int screen=0, paused=0, finished=0, selected=0;
 static Uint32 song_start=0, pause_tick=0;
 static SDL_Window *win;
 static SDL_Renderer *ren;
-static TTF_Font *font;
 static SDL_Texture *menu_bg,*logo,*stage_bg,*stage_pillars,*stage_floor,*bf,*sarvente,*note_atlas;
 static Mix_Music *music=NULL;
 static SDL_Rect bf_idle={505,244,241,244};
 static SDL_Rect sarvente_idle={1422,1986,441,760};
 static SDL_Rect arrows[4]={{0,398,154,157},{0,240,158,154},{162,240,157,154},{647,397,154,157}};
 
-static void text(const char *s,int x,int y,int size,SDL_Color c){
-    if(!font)return;
-    TTF_SetFontSize(font,size);
-    SDL_Surface *sf=TTF_RenderUTF8_Blended(font,s,c);
-    if(!sf)return;
-    SDL_Texture *t=SDL_CreateTextureFromSurface(ren,sf);
-    SDL_Rect d={x,y,sf->w,sf->h};
-    SDL_RenderCopy(ren,t,NULL,&d);
-    SDL_DestroyTexture(t); SDL_FreeSurface(sf);
+static const unsigned char glyphs[36][5]={
+{0x7e,0x11,0x11,0x11,0x7e},{0x7f,0x49,0x49,0x49,0x36},{0x3e,0x41,0x41,0x41,0x22},{0x7f,0x41,0x41,0x22,0x1c},
+{0x7f,0x49,0x49,0x49,0x41},{0x7f,0x09,0x09,0x09,0x01},{0x3e,0x41,0x49,0x49,0x7a},{0x7f,0x08,0x08,0x08,0x7f},
+{0x00,0x41,0x7f,0x41,0x00},{0x20,0x40,0x41,0x3f,0x01},{0x7f,0x08,0x14,0x22,0x41},{0x7f,0x40,0x40,0x40,0x40},
+{0x7f,0x02,0x0c,0x02,0x7f},{0x7f,0x04,0x08,0x10,0x7f},{0x3e,0x41,0x41,0x41,0x3e},{0x7f,0x09,0x09,0x09,0x06},
+{0x3e,0x41,0x51,0x21,0x5e},{0x7f,0x09,0x19,0x29,0x46},{0x46,0x49,0x49,0x49,0x31},{0x01,0x01,0x7f,0x01,0x01},
+{0x3f,0x40,0x40,0x40,0x3f},{0x1f,0x20,0x40,0x20,0x1f},{0x7f,0x20,0x18,0x20,0x7f},{0x63,0x14,0x08,0x14,0x63},
+{0x03,0x04,0x78,0x04,0x03},{0x61,0x51,0x49,0x45,0x43},
+{0x3e,0x51,0x49,0x45,0x3e},{0x00,0x42,0x7f,0x40,0x00},{0x62,0x51,0x49,0x49,0x46},{0x22,0x41,0x49,0x49,0x36},
+{0x18,0x14,0x12,0x7f,0x10},{0x2f,0x49,0x49,0x49,0x31},{0x3e,0x49,0x49,0x49,0x32},{0x01,0x71,0x09,0x05,0x03},
+{0x36,0x49,0x49,0x49,0x36},{0x26,0x49,0x49,0x49,0x3e}
+};
+static void text(const char *s,int x,int y,int size,SDL_Color color){
+    int scale=size/8; if(scale<1)scale=1; if(scale>3)scale=3;
+    SDL_SetRenderDrawColor(ren,color.r,color.g,color.b,color.a);
+    for(;*s;s++,x+=6*scale){
+        char ch=*s; int idx=-1;
+        if(ch>='A'&&ch<='Z')idx=ch-'A';
+        else if(ch>='a'&&ch<='z')idx=ch-'a';
+        else if(ch>='0'&&ch<='9')idx=26+ch-'0';
+        if(idx>=0){
+            for(int cx=0;cx<5;cx++)for(int cy=0;cy<7;cy++)
+                if(glyphs[idx][cx]&(1<<cy)){
+                    SDL_Rect q={x+cx*scale,y+cy*scale,scale,scale};
+                    SDL_RenderFillRect(ren,&q);
+                }
+        }else if(ch==':'){
+            SDL_Rect q1={x+2*scale,y+2*scale,scale,scale},q2={x+2*scale,y+5*scale,scale,scale};
+            SDL_RenderFillRect(ren,&q1);SDL_RenderFillRect(ren,&q2);
+        }else if(ch=='-'){
+            SDL_Rect q={x+1*scale,y+3*scale,4*scale,scale};SDL_RenderFillRect(ren,&q);
+        }
+    }
 }
 static SDL_Texture *load(const char *p){return IMG_LoadTexture(ren,p);}
 static void image(SDL_Texture *t,int x,int y,int w,int h){
@@ -151,13 +174,12 @@ int main(int argc, char *argv[]){
     (void)argc; (void)argv;
     sceCtrlSetSamplingCycle(0); sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
-    IMG_Init(IMG_INIT_PNG); TTF_Init(); Mix_Init(MIX_INIT_OGG); Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
+    SDL_SetMainReady(); IMG_Init(IMG_INIT_PNG); Mix_Init(MIX_INIT_OGG); Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
     win=SDL_CreateWindow("GUD FNF PSP",0,0,W,H,SDL_WINDOW_SHOWN);
     if(!win)return 2;
     ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED);
     if(!ren)ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_SOFTWARE);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
-    font=TTF_OpenFont("assets/vcr.ttf",16);
     menu_bg=load("assets/menuBG.png"); logo=load("assets/logo.png");
     stage_bg=load("assets/churchlight/bg.png");stage_pillars=load("assets/churchlight/pillars.png");stage_floor=load("assets/churchlight/floor.png");
     bf=load("assets/bf/Bf.png");sarvente=load("assets/classiccharacters/sarvente_sheet.png");note_atlas=load("assets/NOTE_assets.png");
@@ -188,8 +210,7 @@ int main(int argc, char *argv[]){
         old=pad; SDL_Delay(16);
     }
     Mix_HaltMusic();if(music)Mix_FreeMusic(music);
-    if(font)TTF_CloseFont(font);
     SDL_DestroyRenderer(ren);SDL_DestroyWindow(win);
-    Mix_CloseAudio();Mix_Quit();TTF_Quit();IMG_Quit();SDL_Quit();
+    Mix_CloseAudio();Mix_Quit();IMG_Quit();SDL_Quit();
     sceKernelExitGame();return 0;
 }
