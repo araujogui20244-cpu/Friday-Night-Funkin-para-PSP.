@@ -1,4 +1,5 @@
 name: Build GUD FNF Nintendo DS
+# Rebuild using the official devkitPro ds_rules Makefile.
 
 on:
   push:
