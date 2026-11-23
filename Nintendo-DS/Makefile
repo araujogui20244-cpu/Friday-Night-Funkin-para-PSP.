@@ -1,4 +1,5 @@
 .SUFFIXES:
+
 ifeq ($(strip $(DEVKITARM)),)
 $(error "DEVKITARM não está definido. Use a imagem oficial devkitPro.")
 endif
@@ -14,10 +15,14 @@ GAME_SUBTITLE2 := by ivtguioliveira8
 include $(DEVKITARM)/ds_rules
 
 ARCH := -march=armv5te -mtune=arm946e-s -mthumb
-CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections -fdata-sections $(ARCH) $(INCLUDE) -DARM9
-LDFLAGS := -specs=ds_arm9.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+
+# ds_rules define _EXTRADEFS com -D__NDS__ e o include do Calico.
+# Não sobrescrever essas definições: libnds 2.x depende delas.
+CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections -fdata-sections $(ARCH)
+CFLAGS += $(INCLUDE) -DARM9 $(_EXTRADEFS)
+LDFLAGS := -specs=$(DEVKITPRO)/calico/share/ds9.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lnds9
-LIBDIRS := $(DEVKITPRO)/libnds
+LIBDIRS := $(DEVKITPRO)/libnds $(DEVKITPRO)/calico
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT := $(CURDIR)/$(TARGET)
