@@ -1,16 +1,12 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_image.h>
 #include <SDL/SDL_mixer.h>
-#include <pspkernel.h>
-#include <pspctrl.h>
 #include "gud_chart.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-PSP_MODULE_INFO("GUD FNF PSP", 0, 1, 0);
-PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 #define W 480
 #define H 272
@@ -167,12 +163,11 @@ static void draw_end(void){
     text(s,85,122,14,(SDL_Color){170,235,255,255});
     text("CROSS: JOGAR DE NOVO   CIRCLE: MENU",70,165,12,(SDL_Color){255,255,255,255});
 }
-int main(int argc, char *argv[]){
+int SDL_main(int argc, char *argv[]){
     (void)argc; (void)argv;
-    sceCtrlSetSamplingCycle(0); sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
     Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
-    screen_surface=SDL_SetVideoMode(W,H,32,SDL_HWSURFACE|SDL_DOUBLEBUF);
+    screen_surface=SDL_SetVideoMode(W,H,32,SDL_SWSURFACE);
     if(!screen_surface)return 2;
     menu_bg=load("assets/menuBG.png"); logo=load("assets/logo.png");
     stage_bg=load("assets/churchlight/bg.png");stage_pillars=load("assets/churchlight/pillars.png");stage_floor=load("assets/churchlight/floor.png");
@@ -181,7 +176,19 @@ int main(int argc, char *argv[]){
     SceCtrlData pad,old; memset(&old,0,sizeof(old));
     int running=1;
     while(running){
-        sceCtrlReadBufferPositive(&pad,1);
+        SDL_PumpEvents();
+        SDL_Event ev; while(SDL_PollEvent(&ev)) if(ev.type==SDL_QUIT) running=0;
+        SDL_PumpEvents();
+        memset(&pad,0,sizeof(pad));
+        Uint8 *keys=(Uint8*)SDL_GetKeyState(NULL);
+        if(keys[SDLK_LEFT])pad.Buttons|=PSP_CTRL_LEFT;
+        if(keys[SDLK_DOWN])pad.Buttons|=PSP_CTRL_DOWN;
+        if(keys[SDLK_UP])pad.Buttons|=PSP_CTRL_UP;
+        if(keys[SDLK_RIGHT])pad.Buttons|=PSP_CTRL_RIGHT;
+        if(keys[SDLK_RETURN])pad.Buttons|=PSP_CTRL_CROSS;
+        if(keys[SDLK_ESCAPE])pad.Buttons|=PSP_CTRL_CIRCLE;
+        if(keys[SDLK_SPACE])pad.Buttons|=PSP_CTRL_START;
+        if(keys[SDLK_TAB])pad.Buttons|=PSP_CTRL_SELECT;
         unsigned int p=pad.Buttons&~old.Buttons;
         if(p&PSP_CTRL_SELECT){if(game_state==1){Mix_HaltMusic();game_state=0;}else running=0;}
         if(game_state==0){if(p&PSP_CTRL_CROSS)start_song();}
@@ -205,5 +212,5 @@ int main(int argc, char *argv[]){
     }
     Mix_HaltMusic();if(music)Mix_FreeMusic(music);
     Mix_CloseAudio();Mix_Quit();IMG_Quit();SDL_Quit();
-    sceKernelExitGame();return 0;
+    return 0;
 }
