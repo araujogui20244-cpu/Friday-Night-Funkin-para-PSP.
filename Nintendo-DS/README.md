@@ -16,6 +16,6 @@ Esta é a primeira versão de gameplay no DS, ainda não é uma conversão compl
 
 ## Compilar
 
-O GitHub Actions instala `nds-dev`, converte o áudio de teste para o NitroFS, executa `make` e publica o arquivo `GUD_FNF_DS.nds` como artefato.
+O GitHub Actions usa o toolchain devkitPro pré-instalado, compila o áudio de teste embutido no código e publica `GUD_FNF_DS.nds` como artefato.
 
 Criador desta versão: ivtguioliveira8.
