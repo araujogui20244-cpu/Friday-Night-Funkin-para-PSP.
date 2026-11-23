@@ -1,149 +1,209 @@
+#include <SDL.h>
+#include <SDL_image.h>
+#include <SDL_mixer.h>
+#include <SDL_ttf.h>
 #include <pspkernel.h>
-#include <pspdisplay.h>
 #include <pspctrl.h>
-#include <pspgu.h>
-#include <pspgum.h>
-#include <pspdebug.h>
+#include <cJSON.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "gud_chart.h"
+#include <math.h>
 
 PSP_MODULE_INFO("GUD FNF PSP", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
-#define SCREEN_W 480
-#define SCREEN_H 272
-#define LANE_W 58
-#define LANE_GAP 8
-#define LANE_X(i) (106 + (i) * (LANE_W + LANE_GAP))
-#define STRIKE_Y 218
-#define NOTE_TRAVEL_MS 1800
-#define HIT_WINDOW_MS 145
+#define W 480
+#define H 272
+#define MAX_NOTES 2048
+#define HIT_MS 145
+#define TRAVEL_MS 1750
+#define PLAYER_X 260
+#define OPP_X 22
+#define LANE_W 43
+#define GAP 5
+#define STRIKE_Y 210
 
-typedef struct { unsigned int color; unsigned short x,y,z; } Vertex;
-static unsigned int __attribute__((aligned(16))) list[262144];
-static int score=0, misses=0, combo=0, best=0, paused=0, finished=0;
-static unsigned int judged[GUD_TUTORIAL_NOTE_COUNT];
-static unsigned int start_ms=0;
-static unsigned int pause_at=0;
+typedef struct { int time, lane, sustain, player, judged, hit; } Note;
+static Note notes[MAX_NOTES];
+static int note_count=0, score=0, misses=0, combo=0, best=0, health=50;
+static int screen=0, paused=0, finished=0, selected=0;
+static Uint32 song_start=0, pause_tick=0;
+static SDL_Window *win;
+static SDL_Renderer *ren;
+static TTF_Font *font;
+static SDL_Texture *menu_bg,*logo,*stage_bg,*stage_pillars,*stage_floor,*bf,*sarvente,*note_atlas;
+static Mix_Music *music=NULL;
+static SDL_Rect bf_idle={505,244,241,244};
+static SDL_Rect sarvente_idle={1422,1986,441,760};
+static SDL_Rect arrows[4]={{0,398,154,157},{0,240,158,154},{162,240,157,154},{647,397,154,157}};
 
-static unsigned int now_ms(void) {
-    return (unsigned int)(sceKernelGetSystemTimeWide()/1000ULL);
+static void text(const char *s,int x,int y,int size,SDL_Color c){
+    if(!font)return;
+    TTF_SetFontSize(font,size);
+    SDL_Surface *sf=TTF_RenderUTF8_Blended(font,s,c);
+    if(!sf)return;
+    SDL_Texture *t=SDL_CreateTextureFromSurface(ren,sf);
+    SDL_Rect d={x,y,sf->w,sf->h};
+    SDL_RenderCopy(ren,t,NULL,&d);
+    SDL_DestroyTexture(t); SDL_FreeSurface(sf);
 }
-static void rect(int x,int y,int w,int h,unsigned int color) {
-    Vertex *v=(Vertex*)sceGuGetMemory(2*sizeof(Vertex));
-    v[0].color=color; v[0].x=x; v[0].y=y; v[0].z=0;
-    v[1].color=color; v[1].x=x+w; v[1].y=y+h; v[1].z=0;
-    sceGuDrawArray(GU_SPRITES,GU_COLOR_8888|GU_VERTEX_16BIT|GU_TRANSFORM_2D,2,0,v);
+static SDL_Texture *load(const char *p){return IMG_LoadTexture(ren,p);}
+static void image(SDL_Texture *t,int x,int y,int w,int h){
+    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_RenderCopy(ren,t,NULL,&d);
 }
-static void begin_frame(void) {
-    sceGuStart(GU_DIRECT,list);
-    sceGuClearColor(0xff10101c);
-    sceGuClear(GU_COLOR_BUFFER_BIT);
+static void crop(SDL_Texture *t,SDL_Rect src,int x,int y,int w,int h){
+    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_RenderCopy(ren,t,&src,&d);
 }
-static void end_frame(void) {
-    sceGuFinish(); sceGuSync(0,0);
-    sceDisplayWaitVblankStart();
-    sceGuSwapBuffers();
+static void fill(int x,int y,int w,int h,Uint8 r,Uint8 g,Uint8 b,Uint8 a){
+    SDL_SetRenderDrawColor(ren,r,g,b,a); SDL_Rect q={x,y,w,h}; SDL_RenderFillRect(ren,&q);
 }
-static void reset_game(void) {
-    memset(judged,0,sizeof(judged));
-    score=misses=combo=best=paused=finished=0;
-    start_ms=now_ms();
-}
-static unsigned int song_time(void) {
-    unsigned int n=now_ms();
-    return n>=start_ms?n-start_ms:0;
-}
-static void judge_lane(int lane,unsigned int t) {
-    unsigned int i, best_i=0, best_d=0xffffffff;
-    for(i=0;i<GUD_TUTORIAL_NOTE_COUNT;i++) {
-        if(judged[i] || GUD_TUTORIAL_CHART[i].lane!=lane) continue;
-        int diff=(int)GUD_TUTORIAL_CHART[i].time_ms-(int)t;
-        unsigned int d=(unsigned int)(diff<0?-diff:diff);
-        if(d<best_d){best_d=d;best_i=i;}
+static int load_chart(const char *path){
+    FILE *f=fopen(path,"rb"); if(!f)return 0;
+    fseek(f,0,SEEK_END); long n=ftell(f); rewind(f);
+    char *buf=(char*)malloc(n+1); if(!buf){fclose(f);return 0;}
+    fread(buf,1,n,f); buf[n]=0; fclose(f);
+    cJSON *root=cJSON_Parse(buf); free(buf); if(!root)return 0;
+    cJSON *song=cJSON_GetObjectItem(root,"song");
+    cJSON *sections=song?cJSON_GetObjectItem(song,"notes"):NULL;
+    if(!cJSON_IsArray(sections)){cJSON_Delete(root);return 0;}
+    note_count=0;
+    cJSON *sec=NULL;
+    cJSON_ArrayForEach(sec,sections){
+        cJSON *mh=cJSON_GetObjectItem(sec,"mustHitSection");
+        int player=cJSON_IsTrue(mh);
+        cJSON *arr=cJSON_GetObjectItem(sec,"sectionNotes");
+        cJSON *entry=NULL;
+        cJSON_ArrayForEach(entry,arr){
+            if(!cJSON_IsArray(entry)||cJSON_GetArraySize(entry)<3||note_count>=MAX_NOTES)continue;
+            cJSON *tm=cJSON_GetArrayItem(entry,0),*ln=cJSON_GetArrayItem(entry,1),*su=cJSON_GetArrayItem(entry,2);
+            if(!cJSON_IsNumber(tm)||!cJSON_IsNumber(ln))continue;
+            Note *p=&notes[note_count++];
+            p->time=(int)tm->valuedouble; p->lane=((int)ln->valuedouble)%4;
+            p->sustain=cJSON_IsNumber(su)?(int)su->valuedouble:0;
+            p->player=player; p->judged=p->hit=0;
+        }
     }
-    if(best_d<=HIT_WINDOW_MS) {
-        judged[best_i]=1; score+=350; combo++;
-        if(combo>best)best=combo;
-    } else { combo=0; }
+    cJSON_Delete(root);
+    return note_count;
 }
-static void draw_scene(unsigned int t) {
-    int i;
-    /* stage-like background and four play lanes */
-    rect(0,0,480,272,0xff171522);
-    rect(0,0,480,34,0xff29243a);
-    rect(0,246,480,26,0xff29243a);
-    for(i=0;i<4;i++) {
-        unsigned int c=(i==0?0xffd65b75:i==1?0xff58b9d4:i==2?0xffa58be8:0xff70d69b);
-        rect(LANE_X(i),38,LANE_W,192,0xff242334);
-        rect(LANE_X(i),STRIKE_Y,LANE_W,5,c);
-        rect(LANE_X(i)+18,STRIKE_Y-17,22,22,c);
-    }
-    for(i=0;i<(int)GUD_TUTORIAL_NOTE_COUNT;i++) {
-        if(judged[i])continue;
-        int dt=(int)GUD_TUTORIAL_CHART[i].time_ms-(int)t;
-        if(dt>NOTE_TRAVEL_MS || dt< -180)continue;
-        int y=STRIKE_Y-(dt*180)/NOTE_TRAVEL_MS;
-        unsigned int c=(GUD_TUTORIAL_CHART[i].lane==0?0xffd65b75:
-                        GUD_TUTORIAL_CHART[i].lane==1?0xff58b9d4:
-                        GUD_TUTORIAL_CHART[i].lane==2?0xffa58be8:0xff70d69b);
-        rect(LANE_X(GUD_TUTORIAL_CHART[i].lane)+7,y,LANE_W-14,17,c);
-        rect(LANE_X(GUD_TUTORIAL_CHART[i].lane)+12,y+4,LANE_W-24,3,0xffffffff);
-    }
-    /* compact status bars */
-    rect(12,12,score>0?(score/150>200?200:score/150):2,7,0xff75d99a);
-    rect(12,258,misses*8>200?200:misses*8,5,0xffd65b75);
+static void reset_game(void){
+    score=misses=combo=best=0;health=50;paused=finished=0;
+    for(int i=0;i<note_count;i++)notes[i].judged=notes[i].hit=0;
+    song_start=SDL_GetTicks();
 }
-int main(void) {
-    SceCtrlData pad,old;
-    memset(&old,0,sizeof(old));
+static Uint32 song_time(void){return paused?pause_tick-song_start:SDL_GetTicks()-song_start;}
+static void start_song(void){
+    if(music){Mix_HaltMusic();Mix_FreeMusic(music);music=NULL;}
+    music=Mix_LoadMUS("assets/tutorial-remix/Inst.ogg");
+    if(music)Mix_PlayMusic(music,0);
+    reset_game();screen=1;
+}
+static void judge(int lane){
+    int t=(int)song_time(), found=-1, bestdiff=999999;
+    for(int i=0;i<note_count;i++){
+        Note *n=&notes[i]; if(!n->player||n->judged||n->lane!=lane)continue;
+        int d=abs(n->time-t); if(d<bestdiff){bestdiff=d;found=i;}
+    }
+    if(found>=0&&bestdiff<=HIT_MS){
+        notes[found].judged=notes[found].hit=1;
+        score+=bestdiff<45?350:bestdiff<90?200:100;
+        combo++; if(combo>best)best=combo; if(health<100)health+=1;
+    }else{combo=0;misses++;health-=5;}
+}
+static void draw_lanes(int x,int player){
+    for(int l=0;l<4;l++){
+        int px=x+l*(LANE_W+GAP);
+        fill(px,57,LANE_W,178,24,23,39,255);
+        crop(note_atlas,arrows[l],px+2,STRIKE_Y-17,LANE_W-4,34);
+        SDL_SetRenderDrawColor(ren,220,220,255,60);
+        SDL_Rect r={px,57,LANE_W,178}; SDL_RenderDrawRect(ren,&r);
+    }
+}
+static void draw_game(void){
+    image(stage_bg,0,0,W,H);
+    image(stage_pillars,0,0,W,H);
+    image(stage_floor,0,170,W,102);
+    crop(sarvente,sarvente_idle,45,66,105,155);
+    crop(bf,bf_idle,348,100,95,105);
+    draw_lanes(OPP_X,0); draw_lanes(PLAYER_X,1);
+    Uint32 t=song_time();
+    for(int i=0;i<note_count;i++){
+        Note *n=&notes[i]; if(n->judged&&n->player)continue;
+        int dt=n->time-(int)t;
+        if(dt>TRAVEL_MS||dt< -HIT_MS)continue;
+        int x=(n->player?PLAYER_X:OPP_X)+n->lane*(LANE_W+GAP)+5;
+        int y=STRIKE_Y-(dt*150)/TRAVEL_MS;
+        if(n->sustain>0){
+            int tail=(n->sustain*150)/TRAVEL_MS;
+            fill(x+12,y-tail,14,tail,190,190,255,180);
+        }
+        crop(note_atlas,arrows[n->lane],x,y,LANE_W-10,32);
+    }
+    fill(15,12,450,8,50,48,67,255); fill(15,12,health*4,8,95,220,145,255);
+    char s[128]; snprintf(s,sizeof(s),"SCORE %d   COMBO %d   MISSES %d",score,combo,misses);
+    text(s,16,25,12,(SDL_Color){255,255,255,255});
+    text("START: PAUSE   SELECT: MENU",155,254,10,(SDL_Color){220,220,230,255});
+}
+static void draw_menu(void){
+    image(menu_bg,0,0,W,H);
+    fill(0,0,W,H,10,8,20,110);
+    image(logo,120,20,240,92);
+    text("GUD FNF PSP",164,112,23,(SDL_Color){255,255,255,255});
+    text("FREEPLAY",190,157,20,(SDL_Color){255,255,255,255});
+    text("TUTORIAL REMIX",160,188,16,(SDL_Color){120,235,255,255});
+    text("X / CROSS: JOGAR",168,226,13,(SDL_Color){255,255,255,255});
+    text("D-PAD: NOTAS    START: PAUSA",110,250,11,(SDL_Color){230,230,240,255});
+}
+static void draw_end(void){
+    fill(45,58,390,150,10,10,25,235);
+    text("MUSICA FINALIZADA",115,78,22,(SDL_Color){255,255,255,255});
+    char s[100];snprintf(s,sizeof(s),"SCORE %d   MISSES %d   MELHOR COMBO %d",score,misses,best);
+    text(s,85,122,14,(SDL_Color){170,235,255,255});
+    text("CROSS: JOGAR DE NOVO   CIRCLE: MENU",70,165,12,(SDL_Color){255,255,255,255});
+}
+int main(void){
     sceCtrlSetSamplingCycle(0); sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
-    pspDebugScreenInit();
-    sceGuInit();
-    sceGuStart(GU_DIRECT,list);
-    sceGuDrawBuffer(GU_PSM_8888,(void*)0,512);
-    sceGuDispBuffer(SCREEN_W,SCREEN_H,(void*)0x88000,512);
-    sceGuDepthBuffer((void*)0x110000,512);
-    sceGuOffset(2048-(SCREEN_W/2),2048-(SCREEN_H/2));
-    sceGuViewport(2048,2048,SCREEN_W,SCREEN_H);
-    sceGuDepthRange(65535,0);
-    sceGuScissor(0,0,SCREEN_W,SCREEN_H);
-    sceGuEnable(GU_SCISSOR_TEST);
-    sceGuDisable(GU_DEPTH_TEST);
-    sceGuDisable(GU_TEXTURE_2D);
-    sceGuShadeModel(GU_FLAT);
-    sceGuFinish(); sceGuSync(0,0); sceGuDisplay(GU_TRUE);
-    reset_game();
-    while(1) {
+    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
+    IMG_Init(IMG_INIT_PNG); TTF_Init(); Mix_Init(MIX_INIT_OGG); Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
+    win=SDL_CreateWindow("GUD FNF PSP",0,0,W,H,SDL_WINDOW_SHOWN);
+    if(!win)return 2;
+    ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED);
+    if(!ren)ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_SOFTWARE);
+    SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
+    font=TTF_OpenFont("assets/vcr.ttf",16);
+    menu_bg=load("assets/menuBG.png"); logo=load("assets/logo.png");
+    stage_bg=load("assets/churchlight/bg.png");stage_pillars=load("assets/churchlight/pillars.png");stage_floor=load("assets/churchlight/floor.png");
+    bf=load("assets/bf/Bf.png");sarvente=load("assets/classiccharacters/sarvente_sheet.png");note_atlas=load("assets/NOTE_assets.png");
+    load_chart("assets/tutorial-remix/tutorial-remix.json");
+    SceCtrlData pad,old; memset(&old,0,sizeof(old));
+    int running=1;
+    while(running){
         sceCtrlReadBufferPositive(&pad,1);
-        unsigned int pressed=pad.Buttons & ~old.Buttons;
-        if(pressed & PSP_CTRL_SELECT)break;
-        if(pressed & PSP_CTRL_START) {
-            if(!paused){paused=1;pause_at=now_ms();}
-            else {start_ms += now_ms()-pause_at;paused=0;}
+        unsigned int p=pad.Buttons&~old.Buttons;
+        if(p&PSP_CTRL_SELECT){if(screen==1){Mix_HaltMusic();screen=0;}else running=0;}
+        if(screen==0){if(p&PSP_CTRL_CROSS)start_song();}
+        else if(screen==1){
+            if(p&PSP_CTRL_START){if(!paused){paused=1;pause_tick=SDL_GetTicks();Mix_PauseMusic();}else{song_start+=SDL_GetTicks()-pause_tick;paused=0;Mix_ResumeMusic();}}
+            if(!paused){
+                if(p&PSP_CTRL_LEFT)judge(0); if(p&PSP_CTRL_DOWN)judge(1);
+                if(p&PSP_CTRL_UP)judge(2); if(p&PSP_CTRL_RIGHT)judge(3);
+                Uint32 t=song_time();
+                for(int i=0;i<note_count;i++){Note *n=&notes[i];if(!n->player&&!n->judged&&t>(Uint32)(n->time+HIT_MS)){n->judged=1;}}
+                for(int i=0;i<note_count;i++){Note *n=&notes[i];if(n->player&&!n->judged&&t>(Uint32)(n->time+HIT_MS)){n->judged=1;misses++;combo=0;health-=4;}}
+                if(health<=0||t>(Uint32)(notes[note_count-1].time+3000)){finished=1;Mix_HaltMusic();}
+            }
         }
-        if(pressed & PSP_CTRL_CROSS && finished)reset_game();
-        if(!paused && !finished) {
-            unsigned int t=song_time();
-            if(pressed & PSP_CTRL_LEFT)judge_lane(0,t);
-            if(pressed & PSP_CTRL_DOWN)judge_lane(1,t);
-            if(pressed & PSP_CTRL_UP)judge_lane(2,t);
-            if(pressed & PSP_CTRL_RIGHT)judge_lane(3,t);
-            unsigned int i;
-            for(i=0;i<GUD_TUTORIAL_NOTE_COUNT;i++)
-                if(!judged[i] && t>GUD_TUTORIAL_CHART[i].time_ms+HIT_WINDOW_MS) {
-                    judged[i]=1;misses++;combo=0;
-                }
-            if(t>GUD_TUTORIAL_CHART[GUD_TUTORIAL_NOTE_COUNT-1].time_ms+2500)finished=1;
-        }
-        begin_frame(); draw_scene(song_time());
-        if(paused)rect(150,104,180,48,0xee000000);
-        if(finished)rect(120,94,240,76,0xee111122);
-        end_frame();
-        old=pad;
+        SDL_SetRenderDrawColor(ren,0,0,0,255);SDL_RenderClear(ren);
+        if(screen==0)draw_menu();else{draw_game();if(paused){fill(120,95,240,70,0,0,0,210);text("PAUSADO",190,112,22,(SDL_Color){255,255,255,255});}if(finished)draw_end();}
+        SDL_RenderPresent(ren);
+        if(screen==1&&finished&&(p&PSP_CTRL_CROSS)){start_song();}
+        if(screen==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();screen=0;}
+        old=pad; SDL_Delay(16);
     }
-    sceGuTerm();
-    sceKernelExitGame();
-    return 0;
+    Mix_HaltMusic();if(music)Mix_FreeMusic(music);
+    if(font)TTF_CloseFont(font);
+    SDL_DestroyRenderer(ren);SDL_DestroyWindow(win);
+    Mix_CloseAudio();Mix_Quit();TTF_Quit();IMG_Quit();SDL_Quit();
+    sceKernelExitGame();return 0;
 }
