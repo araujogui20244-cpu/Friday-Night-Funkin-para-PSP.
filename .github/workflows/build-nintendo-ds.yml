@@ -31,7 +31,6 @@ jobs:
       - name: Verify ROM output
         run: |
           test -s Nintendo-DS/GUD_FNF_DS.nds
-          file Nintendo-DS/GUD_FNF_DS.nds
           ls -lh Nintendo-DS/GUD_FNF_DS.nds
 
       - name: Upload NDS artifact
