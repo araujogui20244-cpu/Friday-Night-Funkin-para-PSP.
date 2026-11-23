@@ -28,6 +28,7 @@ static Uint32 song_start=0, pause_tick=0;
 static SDL_Surface *screen_surface;
 static SDL_Surface *menu_bg,*logo,*stage_bg,*stage_pillars,*stage_floor,*bf,*sarvente,*note_atlas;
 static Mix_Music *music=NULL;
+static int audio_ready=0;
 static SDL_Rect bf_idle={505,244,241,244};
 static SDL_Rect sarvente_idle={1422,1986,441,760};
 static SDL_Rect arrows[4]={{0,398,154,157},{0,240,158,154},{162,240,157,154},{647,397,154,157}};
@@ -98,8 +99,8 @@ static void reset_game(void){
 static Uint32 song_time(void){return paused?pause_tick-song_start:SDL_GetTicks()-song_start;}
 static void start_song(void){
     if(music){Mix_HaltMusic();Mix_FreeMusic(music);music=NULL;}
-    music=Mix_LoadMUS("assets/tutorial-remix/Inst.ogg");
-    if(music)Mix_PlayMusic(music,0);
+    if(!audio_ready) audio_ready=(Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048)==0);
+    if(audio_ready){ music=Mix_LoadMUS("assets/tutorial-remix/Inst.ogg"); if(music)Mix_PlayMusic(music,0); }
     reset_game();game_state=1;
 }
 static void judge(int lane){
@@ -166,8 +167,7 @@ static void draw_end(void){
 }
 int SDL_main(int argc, char *argv[]){
     (void)argc; (void)argv;
-    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
-    Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
+    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_TIMER)<0)return 1;
     screen_surface=SDL_SetVideoMode(W,H,32,SDL_SWSURFACE);
     if(!screen_surface)return 2;
     menu_bg=load("assets/menuBG.png"); logo=load("assets/logo.png");
@@ -201,6 +201,6 @@ int SDL_main(int argc, char *argv[]){
         old=pad; SDL_Delay(16);
     }
     Mix_HaltMusic();if(music)Mix_FreeMusic(music);
-    Mix_CloseAudio();Mix_Quit();IMG_Quit();SDL_Quit();
+    if(audio_ready)Mix_CloseAudio();Mix_Quit();IMG_Quit();SDL_Quit();
     return 0;
 }
