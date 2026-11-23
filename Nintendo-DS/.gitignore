@@ -1,0 +1,7 @@
+build/
+*.elf
+*.nds
+*.ds.gba
+*.map
+*.d
+*.o
