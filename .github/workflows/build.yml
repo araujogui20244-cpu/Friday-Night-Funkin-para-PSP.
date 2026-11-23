@@ -17,7 +17,6 @@ jobs:
           psp-pacman -Sy --noconfirm sdl2 sdl2-image sdl2-mixer sdl2-ttf cjson
       - name: Build EBOOT
         run: |
-          sdl2-config --version
           make clean || true
           make
           test -s EBOOT.PBP
