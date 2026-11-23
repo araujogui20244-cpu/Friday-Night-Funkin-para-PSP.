@@ -73,11 +73,11 @@ static SDL_Surface *load(const char *p){return IMG_Load(p);}
 static void image(SDL_Surface *t,int x,int y,int w,int h){
     if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,NULL,screen_surface,&d);
 }
-static void crop(SDL_Texture *t,SDL_Rect src,int x,int y,int w,int h){
+static void crop(SDL_Surface *t,SDL_Rect src,int x,int y,int w,int h){
     if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,&src,screen_surface,&d);
 }
 static void fill(int x,int y,int w,int h,Uint8 r,Uint8 g,Uint8 b,Uint8 a){
-    SDL_Rect q={x,y,w,h}; SDL_FillRect(screen,&q,SDL_MapRGB(screen->format,r,g,b));
+    SDL_Rect q={x,y,w,h}; SDL_FillRect(screen_surface,&q,SDL_MapRGB(screen_surface->format,r,g,b));
 }
 static int load_chart(const char *path){
     (void)path;
@@ -185,7 +185,7 @@ int main(int argc, char *argv[]){
         unsigned int p=pad.Buttons&~old.Buttons;
         if(p&PSP_CTRL_SELECT){if(game_state==1){Mix_HaltMusic();game_state=0;}else running=0;}
         if(game_state==0){if(p&PSP_CTRL_CROSS)start_song();}
-        else if(screen==1){
+        else if(game_state==1){
             if(p&PSP_CTRL_START){if(!paused){paused=1;pause_tick=SDL_GetTicks();Mix_PauseMusic();}else{song_start+=SDL_GetTicks()-pause_tick;paused=0;Mix_ResumeMusic();}}
             if(!paused){
                 if(p&PSP_CTRL_LEFT)judge(0); if(p&PSP_CTRL_DOWN)judge(1);
@@ -196,11 +196,11 @@ int main(int argc, char *argv[]){
                 if(health<=0||t>(Uint32)(notes[note_count-1].time+3000)){finished=1;Mix_HaltMusic();}
             }
         }
-        SDL_FillRect(screen,NULL,SDL_MapRGB(screen->format,0,0,0));
-        if(screen==0)draw_menu();else{draw_game();if(paused){fill(120,95,240,70,0,0,0,210);text("PAUSADO",190,112,22,(SDL_Color){255,255,255,255});}if(finished)draw_end();}
+        SDL_FillRect(screen_surface,NULL,SDL_MapRGB(screen_surface->format,0,0,0));
+        if(game_state==0)draw_menu();else{draw_game();if(paused){fill(120,95,240,70,0,0,0,210);text("PAUSADO",190,112,22,(SDL_Color){255,255,255,255});}if(finished)draw_end();}
         SDL_Flip(screen_surface);
-        if(screen==1&&finished&&(p&PSP_CTRL_CROSS)){start_song();}
-        if(screen==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();screen=0;}
+        if(game_state==1&&finished&&(p&PSP_CTRL_CROSS)){start_song();}
+        if(screen==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();game_state=0;}
         old=pad; SDL_Delay(16);
     }
     Mix_HaltMusic();if(music)Mix_FreeMusic(music);
