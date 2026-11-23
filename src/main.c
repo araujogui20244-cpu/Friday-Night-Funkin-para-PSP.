@@ -4,7 +4,7 @@
 #include <SDL_ttf.h>
 #include <pspkernel.h>
 #include <pspctrl.h>
-#include <cJSON.h>
+#include "gud_chart.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,32 +59,17 @@ static void fill(int x,int y,int w,int h,Uint8 r,Uint8 g,Uint8 b,Uint8 a){
     SDL_SetRenderDrawColor(ren,r,g,b,a); SDL_Rect q={x,y,w,h}; SDL_RenderFillRect(ren,&q);
 }
 static int load_chart(const char *path){
-    FILE *f=fopen(path,"rb"); if(!f)return 0;
-    fseek(f,0,SEEK_END); long n=ftell(f); rewind(f);
-    char *buf=(char*)malloc(n+1); if(!buf){fclose(f);return 0;}
-    fread(buf,1,n,f); buf[n]=0; fclose(f);
-    cJSON *root=cJSON_Parse(buf); free(buf); if(!root)return 0;
-    cJSON *song=cJSON_GetObjectItem(root,"song");
-    cJSON *sections=song?cJSON_GetObjectItem(song,"notes"):NULL;
-    if(!cJSON_IsArray(sections)){cJSON_Delete(root);return 0;}
-    note_count=0;
-    cJSON *sec=NULL;
-    cJSON_ArrayForEach(sec,sections){
-        cJSON *mh=cJSON_GetObjectItem(sec,"mustHitSection");
-        int player=cJSON_IsTrue(mh);
-        cJSON *arr=cJSON_GetObjectItem(sec,"sectionNotes");
-        cJSON *entry=NULL;
-        cJSON_ArrayForEach(entry,arr){
-            if(!cJSON_IsArray(entry)||cJSON_GetArraySize(entry)<3||note_count>=MAX_NOTES)continue;
-            cJSON *tm=cJSON_GetArrayItem(entry,0),*ln=cJSON_GetArrayItem(entry,1),*su=cJSON_GetArrayItem(entry,2);
-            if(!cJSON_IsNumber(tm)||!cJSON_IsNumber(ln))continue;
-            Note *p=&notes[note_count++];
-            p->time=(int)tm->valuedouble; p->lane=((int)ln->valuedouble)%4;
-            p->sustain=cJSON_IsNumber(su)?(int)su->valuedouble:0;
-            p->player=player; p->judged=p->hit=0;
-        }
+    (void)path;
+    note_count=(int)GUD_TUTORIAL_NOTE_COUNT;
+    if(note_count>MAX_NOTES)note_count=MAX_NOTES;
+    for(int i=0;i<note_count;i++){
+        notes[i].time=(int)GUD_TUTORIAL_CHART[i].time_ms;
+        notes[i].lane=GUD_TUTORIAL_CHART[i].lane;
+        notes[i].sustain=GUD_TUTORIAL_CHART[i].sustain_ms;
+        notes[i].player=GUD_TUTORIAL_CHART[i].player;
+        notes[i].judged=0;
+        notes[i].hit=0;
     }
-    cJSON_Delete(root);
     return note_count;
 }
 static void reset_game(void){
