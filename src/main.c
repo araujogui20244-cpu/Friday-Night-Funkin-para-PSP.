@@ -147,7 +147,8 @@ static void draw_end(void){
     text(s,85,122,14,(SDL_Color){170,235,255,255});
     text("CROSS: JOGAR DE NOVO   CIRCLE: MENU",70,165,12,(SDL_Color){255,255,255,255});
 }
-int main(void){
+int main(int argc, char *argv[]){
+    (void)argc; (void)argv;
     sceCtrlSetSamplingCycle(0); sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
     IMG_Init(IMG_INIT_PNG); TTF_Init(); Mix_Init(MIX_INIT_OGG); Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
