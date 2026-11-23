@@ -1,9 +1,9 @@
 #include <nds.h>
-#include <filesystem.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include "beat_data.h"
 
 #define NOTE_COUNT 180
 #define BPM 111
@@ -14,8 +14,6 @@
 
 typedef struct { u32 timeMs; u8 lane; u8 player; u8 judged; } Note;
 static Note chart[NOTE_COUNT];
-static u8 *beatData = NULL;
-static u32 beatSize = 0;
 static int soundChannel = -1;
 static int score, misses, combo, bestCombo;
 static bool paused;
@@ -29,17 +27,6 @@ static void makeChart(void) {
         chart[i].player = (i % 4 != 0 && i % 4 != 3);
         chart[i].judged = 0;
     }
-}
-
-static void loadBeat(void) {
-    FILE *f = fopen("nitro:/beat.pcm", "rb");
-    if (!f) return;
-    fseek(f, 0, SEEK_END); long n = ftell(f); rewind(f);
-    if (n > 0 && n <= 20000) {
-        beatData = (u8*)malloc((u32)n);
-        if (beatData) beatSize = (u32)fread(beatData, 1, (u32)n, f);
-    }
-    fclose(f);
 }
 
 static void startBeat(void) {
