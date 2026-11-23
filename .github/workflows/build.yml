@@ -12,13 +12,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install PSP SDL libraries
+        run: |
+          psp-pacman -Sy --noconfirm sdl2 sdl2-image sdl2-mixer sdl2-ttf cjson
+      - name: Download and install supplied game assets
+        run: |
+          curl -fL --retry 3 --retry-delay 2 "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-6794-820e-8d45-dd2da96b3043/raw?se=2026-11-23T22%3A55%3A34Z&sp=r&sv=2026-06-06&sr=b&scid=ea5bd76d-ad7f-5226-93cd-7586364446c9&skoid=ba7c401a-35d6-40a0-a0f3-2259cc50bbe2&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-11-23T12%3A46%3A58Z&ske=2026-11-24T12%3A46%3A58Z&sks=b&skv=2026-06-06&sig=lw/TXQoXBNzP5z9nn4weVYnxJOGnmUGlU9Zi9RgbEnA%3D" -o supplied-assets.zip
+          unzip -q supplied-assets.zip -d extracted-assets
+          mkdir -p assets
+          cp -a "extracted-assets/arquivos 📂/." assets/
+          test -s assets/tutorial-remix/tutorial-remix.json
+          test -s assets/tutorial-remix/Inst.ogg
+          test -s assets/bf/Bf.png
       - name: Build EBOOT
         run: |
+          sdl2-config --version
           make clean || true
           make
+          test -s EBOOT.PBP
           mkdir -p output/PSP/GAME/GUDFNF
           cp EBOOT.PBP output/PSP/GAME/GUDFNF/EBOOT.PBP
-          printf "GUD FNF PSP - copie a pasta GUDFNF para PSP/GAME/\n" > output/LEIA-ME.txt
+          cp -a assets output/PSP/GAME/GUDFNF/assets
+          cat > output/LEIA-ME.txt <<'EOF'
+          GUD FNF PSP
+          Copie a pasta PSP para a raiz do Memory Stick ou cartão usado pelo PPSSPP.
+          Jogo: PSP/GAME/GUDFNF/EBOOT.PBP
+          Controles: CROSS inicia/reinicia, D-PAD acerta notas, START pausa, SELECT volta ao menu/sai.
+          Inclui o chart Tutorial Remix presente no pacote enviado. Os outros áudios são mantidos nos assets, mas não têm charts incluídos neste pacote.
+          EOF
       - name: Upload compiled game files
         uses: actions/upload-artifact@v4
         with:
@@ -34,11 +55,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: compiled-psp-files
-          path: output/
+          path: output
       - name: Create PPSSPP ZIP
         run: |
           cd output
-          zip -r ../GUD_FNF_PSP_PPSSPP.zip .
+          zip -qr ../GUD_FNF_PSP_PPSSPP.zip .
       - name: Upload final game ZIP
         uses: actions/upload-artifact@v4
         with:
