@@ -19,10 +19,6 @@ jobs:
           test -f /opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc
           test -f /opt/devkitpro/libnds/include/nds.h
           test -f /opt/devkitpro/devkitARM/ds_rules
-      - name: Prepare embedded beat sample
-        run: |
-          base64 -d Nintendo-DS/data/beat.pcm.b64 > Nintendo-DS/data/beat.pcm
-          test -s Nintendo-DS/data/beat.pcm
       - name: Compile Nintendo DS ROM
         run: |
           export DEVKITPRO=/opt/devkitpro
