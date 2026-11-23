@@ -20,7 +20,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define NOTE_TRAVEL_MS 1800
 #define HIT_WINDOW_MS 145
 
-typedef struct { unsigned short x,y,z; unsigned int color; } Vertex;
+typedef struct { unsigned int color; unsigned short x,y,z; } Vertex;
 static unsigned int __attribute__((aligned(16))) list[262144];
 static int score=0, misses=0, combo=0, best=0, paused=0, finished=0;
 static unsigned int judged[GUD_TUTORIAL_NOTE_COUNT];
@@ -32,8 +32,8 @@ static unsigned int now_ms(void) {
 }
 static void rect(int x,int y,int w,int h,unsigned int color) {
     Vertex *v=(Vertex*)sceGuGetMemory(2*sizeof(Vertex));
-    v[0].x=x; v[0].y=y; v[0].z=0; v[0].color=color;
-    v[1].x=x+w; v[1].y=y+h; v[1].z=0; v[1].color=color;
+    v[0].color=color; v[0].x=x; v[0].y=y; v[0].z=0;
+    v[1].color=color; v[1].x=x+w; v[1].y=y+h; v[1].z=0;
     sceGuDrawArray(GU_SPRITES,GU_COLOR_8888|GU_VERTEX_16BIT|GU_TRANSFORM_2D,2,0,v);
 }
 static void begin_frame(void) {
