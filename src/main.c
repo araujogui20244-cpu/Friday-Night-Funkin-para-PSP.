@@ -26,9 +26,9 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 typedef struct { int time, lane, sustain, player, judged, hit; } Note;
 static Note notes[MAX_NOTES];
 static int note_count=0, score=0, misses=0, combo=0, best=0, health=50;
-static int screen=0, paused=0, finished=0, selected=0;
+static int game_state=0, paused=0, finished=0;
 static Uint32 song_start=0, pause_tick=0;
-static SDL_Surface *screen;
+static SDL_Surface *screen_surface;
 static SDL_Surface *menu_bg,*logo,*stage_bg,*stage_pillars,*stage_floor,*bf,*sarvente,*note_atlas;
 static Mix_Music *music=NULL;
 static SDL_Rect bf_idle={505,244,241,244};
@@ -59,22 +59,22 @@ static void text(const char *s,int x,int y,int size,SDL_Color color){
             for(int cx=0;cx<5;cx++)for(int cy=0;cy<7;cy++)
                 if(glyphs[idx][cx]&(1<<cy)){
                     SDL_Rect q={x+cx*scale,y+cy*scale,scale,scale};
-                    SDL_FillRect(screen,&q,SDL_MapRGB(screen->format,color.r,color.g,color.b));
+                    SDL_FillRect(screen_surface,&q,SDL_MapRGB(screen_surface->format,color.r,color.g,color.b));
                 }
         }else if(ch==':'){
             SDL_Rect q1={x+2*scale,y+2*scale,scale,scale},q2={x+2*scale,y+5*scale,scale,scale};
-            SDL_RenderFillRect(ren,&q1);SDL_RenderFillRect(ren,&q2);
+            SDL_FillRect(screen_surface,&q1,SDL_MapRGB(screen_surface->format,color.r,color.g,color.b));SDL_FillRect(screen_surface,&q2,SDL_MapRGB(screen_surface->format,color.r,color.g,color.b));
         }else if(ch=='-'){
-            SDL_Rect q={x+1*scale,y+3*scale,4*scale,scale};SDL_RenderFillRect(ren,&q);
+            SDL_Rect q={x+1*scale,y+3*scale,4*scale,scale};SDL_FillRect(screen_surface,&q,SDL_MapRGB(screen_surface->format,color.r,color.g,color.b));
         }
     }
 }
-static SDL_Texture *load(const char *p){return IMG_LoadTexture(ren,p);}
-static void image(SDL_Texture *t,int x,int y,int w,int h){
-    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,NULL,screen,&d);
+static SDL_Surface *load(const char *p){return IMG_Load(p);}
+static void image(SDL_Surface *t,int x,int y,int w,int h){
+    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,NULL,screen_surface,&d);
 }
 static void crop(SDL_Texture *t,SDL_Rect src,int x,int y,int w,int h){
-    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,&src,screen,&d);
+    if(!t)return; SDL_Rect d={x,y,w,h}; SDL_BlitSurface(t,&src,screen_surface,&d);
 }
 static void fill(int x,int y,int w,int h,Uint8 r,Uint8 g,Uint8 b,Uint8 a){
     SDL_Rect q={x,y,w,h}; SDL_FillRect(screen,&q,SDL_MapRGB(screen->format,r,g,b));
@@ -103,7 +103,7 @@ static void start_song(void){
     if(music){Mix_HaltMusic();Mix_FreeMusic(music);music=NULL;}
     music=Mix_LoadMUS("assets/tutorial-remix/Inst.ogg");
     if(music)Mix_PlayMusic(music,0);
-    reset_game();screen=1;
+    reset_game();game_state=1;
 }
 static void judge(int lane){
     int t=(int)song_time(), found=-1, bestdiff=999999;
@@ -172,8 +172,8 @@ int main(int argc, char *argv[]){
     sceCtrlSetSamplingCycle(0); sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)<0)return 1;
     Mix_OpenAudio(44100,AUDIO_S16SYS,2,2048);
-    screen=SDL_SetVideoMode(W,H,32,SDL_HWSURFACE|SDL_DOUBLEBUF);
-    if(!screen)return 2;
+    screen_surface=SDL_SetVideoMode(W,H,32,SDL_HWSURFACE|SDL_DOUBLEBUF);
+    if(!screen_surface)return 2;
     menu_bg=load("assets/menuBG.png"); logo=load("assets/logo.png");
     stage_bg=load("assets/churchlight/bg.png");stage_pillars=load("assets/churchlight/pillars.png");stage_floor=load("assets/churchlight/floor.png");
     bf=load("assets/bf/Bf.png");sarvente=load("assets/classiccharacters/sarvente_sheet.png");note_atlas=load("assets/NOTE_assets.png");
@@ -183,8 +183,8 @@ int main(int argc, char *argv[]){
     while(running){
         sceCtrlReadBufferPositive(&pad,1);
         unsigned int p=pad.Buttons&~old.Buttons;
-        if(p&PSP_CTRL_SELECT){if(screen==1){Mix_HaltMusic();screen=0;}else running=0;}
-        if(screen==0){if(p&PSP_CTRL_CROSS)start_song();}
+        if(p&PSP_CTRL_SELECT){if(game_state==1){Mix_HaltMusic();game_state=0;}else running=0;}
+        if(game_state==0){if(p&PSP_CTRL_CROSS)start_song();}
         else if(screen==1){
             if(p&PSP_CTRL_START){if(!paused){paused=1;pause_tick=SDL_GetTicks();Mix_PauseMusic();}else{song_start+=SDL_GetTicks()-pause_tick;paused=0;Mix_ResumeMusic();}}
             if(!paused){
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]){
         }
         SDL_FillRect(screen,NULL,SDL_MapRGB(screen->format,0,0,0));
         if(screen==0)draw_menu();else{draw_game();if(paused){fill(120,95,240,70,0,0,0,210);text("PAUSADO",190,112,22,(SDL_Color){255,255,255,255});}if(finished)draw_end();}
-        SDL_Flip(screen);
+        SDL_Flip(screen_surface);
         if(screen==1&&finished&&(p&PSP_CTRL_CROSS)){start_song();}
         if(screen==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();screen=0;}
         old=pad; SDL_Delay(16);
