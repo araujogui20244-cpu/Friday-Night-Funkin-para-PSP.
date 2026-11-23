@@ -200,7 +200,7 @@ int main(int argc, char *argv[]){
         if(game_state==0)draw_menu();else{draw_game();if(paused){fill(120,95,240,70,0,0,0,210);text("PAUSADO",190,112,22,(SDL_Color){255,255,255,255});}if(finished)draw_end();}
         SDL_Flip(screen_surface);
         if(game_state==1&&finished&&(p&PSP_CTRL_CROSS)){start_song();}
-        if(screen==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();game_state=0;}
+        if(game_state==1&&finished&&(p&PSP_CTRL_CIRCLE)){Mix_HaltMusic();game_state=0;}
         old=pad; SDL_Delay(16);
     }
     Mix_HaltMusic();if(music)Mix_FreeMusic(music);
