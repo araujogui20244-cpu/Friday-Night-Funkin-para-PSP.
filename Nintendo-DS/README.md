@@ -1,32 +1,21 @@
 # GUD FNF — Nintendo DS / DS Lite
 
-Projeto homebrew para o Nintendo DS original e DS Lite. O alvo de compilação é um arquivo `.nds`, usando devkitPro/devkitARM e libnds.
+Homebrew de ritmo para Nintendo DS original e DS Lite, compilado com devkitPro/devkitARM e libnds.
 
-## Estado atual
+## Conteúdo desta build
 
-Esta primeira base é um **protótipo de ritmo compilável**, não uma conversão completa do FNF:
-- menu inicial;
-- quatro pistas com entrada pelas setas e pela tela touch;
-- notas de jogador e notas automáticas do oponente;
-- pontuação, combo e misses;
-- pausa pelo botão START;
-- tela de resultado.
+- Menu com Story Mode, Freeplay e Créditos.
+- Gameplay de quatro pistas com notas em movimento.
+- Julgamento de acertos, pontuação, combo e misses.
+- Controles pelo direcional, A/B/X/Y e tela de toque.
+- Efeito sonoro rítmico em loop para validar a reprodução de áudio no hardware.
 
-A música e os gráficos originais ainda não foram integrados. O Nintendo DS não reproduz OGG diretamente; os áudios precisam ser convertidos e integrados por uma biblioteca de áudio compatível. Imagens PNG/XML também precisam ser convertidas para formatos adequados ao hardware.
+## Limitações desta primeira build jogável
+
+Esta é a primeira versão de gameplay no DS, ainda não é uma conversão completa do mod Mid-Fight Masses. A faixa de áudio é um loop de teste sintetizado e o chart atual é um padrão de treino gerado no código. Os sprites, cenários e as músicas originais (Parish, Worship, Zavodila e Gospel) ainda precisam ser convertidos e integrados para o hardware do DS. Sustains, animações e seleção individual de músicas também ainda não estão implementados.
 
 ## Compilar
 
-O GitHub Actions instala o pacote `nds-dev` e executa `make`. O arquivo gerado é `GUD_FNF_DS.nds`, publicado como artefato da execução.
+O GitHub Actions instala `nds-dev`, converte o áudio de teste para o NitroFS, executa `make` e publica o arquivo `GUD_FNF_DS.nds` como artefato.
 
-Também é possível compilar localmente com devkitPro instalado:
-
-```sh
-cd Nintendo-DS
-make
-```
-
-## Teste
-
-Abra o artefato `.nds` no melonDS. A compilação bem-sucedida confirma que o arquivo foi produzido; a execução no emulador ou em um DS real precisa ser testada separadamente.
-
-Criador: ivtguioliveira8.
+Criador desta versão: ivtguioliveira8.
