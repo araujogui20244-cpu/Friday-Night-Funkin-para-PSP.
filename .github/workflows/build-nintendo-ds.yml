@@ -1,6 +1,4 @@
 name: Build GUD FNF Nintendo DS
-# Rebuild using the official devkitPro ds_rules Makefile.
-
 on:
   push:
     branches: [nintendo-ds]
@@ -8,7 +6,6 @@ on:
       - "Nintendo-DS/**"
       - ".github/workflows/build-nintendo-ds.yml"
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,22 +14,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install Nintendo DS development libraries
         run: dkp-pacman -Sy --noconfirm nds-dev
-
+      - name: Prepare embedded beat sample
+        run: |
+          base64 -d Nintendo-DS/data/beat.pcm.b64 > Nintendo-DS/data/beat.pcm
+          test -s Nintendo-DS/data/beat.pcm
       - name: Compile Nintendo DS ROM
         run: |
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
           make -C Nintendo-DS clean
           make -C Nintendo-DS
-
       - name: Verify ROM output
         run: |
           test -s Nintendo-DS/GUD_FNF_DS.nds
           ls -lh Nintendo-DS/GUD_FNF_DS.nds
-
       - name: Upload NDS artifact
         uses: actions/upload-artifact@v4
         with:
