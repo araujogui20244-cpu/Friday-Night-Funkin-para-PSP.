@@ -43,7 +43,7 @@ static void loadBeat(void) {
 }
 
 static void startBeat(void) {
-    if (beatData && beatSize) soundChannel = soundPlaySample(beatData, SoundFormat_8Bit, beatSize, BEAT_RATE, 100, 64, true, 0);
+    soundChannel = soundPlaySample(gudBeatData, SoundFormat_8Bit, GUD_BEAT_DATA_SIZE, BEAT_RATE, 100, 64, true, 0);
 }
 static void stopBeat(void) {
     if (soundChannel >= 0) { soundKill(soundChannel); soundChannel = -1; }
@@ -142,7 +142,7 @@ static void creditsScreen(void) {
     while(1){scanKeys();if(keysDown()&(KEY_B|KEY_A))break;swiWaitForVBlank();}
 }
 int main(void) {
-    lcdMainOnTop(); consoleDemoInit(); soundEnable(); nitroFSInit(NULL); loadBeat();
+    lcdMainOnTop(); consoleDemoInit(); soundEnable();
     int selected=0;
     while(1){
         menuScreen(selected); scanKeys(); u16 k=keysDown();
